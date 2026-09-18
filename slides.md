@@ -1,8 +1,10 @@
 ---
 # You can also start simply with 'default'
 theme: default
-title: Jetpack XR SDKから紐解くAndroid XR開発と技術選定のヒント
-info: XR Kaigi 2025の登壇資料
+title: UnityでSystem.Net.WebSocketsなWebSocketサーバが動かないのでUnity Monoのコードを覗いてみた
+info: |
+  C# Kaigi 2026の登壇資料
+  https://csharpkaigi.net/talks/lt-unity-websocket
 author: にー兄さん@drumath2237
 class: text-left
 # https://sli.dev/custom/highlighters.html
@@ -20,19 +22,26 @@ hideInToc: true
 download: true
 export:
   dark: true
-exportFilename: XRK2025-S-045_堤海斗
+exportFilename: csharpkaigi26-unity-websocket
 transition: none
+# seoMeta:
+#   ogImage: auto
 ---
 
-# <span style="color:#33CCFF;">Jetpack XR SDK</span>から紐解く
+<style>
+.intro h1{
+    font-size: 3.2rem;
+    line-height: 1
+}
+</style>
 
-# Android XR開発と
-
-# 技術選定のヒント
+# Unityで
+# <span style="color:#33CCFF;">System.Net.WebSockets</span> な
+# WebSocketサーバが動かないので
+# Unity Monoのコードを覗いてみた
 
 ### にー兄さん[@ninisan_drumath](https://twitter.com/ninisan_drumath)
-
-### XR Kaigi 2025
+### C# Kaigi 2026
 
 ---
 layout: two-cols
@@ -60,8 +69,8 @@ Android XR / 3D Gaussian Splatting
 
 ::right::
 
-<img src="https://pbs.twimg.com/profile_images/1113849253548269568/4uy_K_LA_400x400.png" class="rounded h-60 ml-20"/>
-<img src="/images/realavatar.jpg" class="rounded h-60 ml-50"/>
+<img src="https://pbs.twimg.com/profile_images/1113849253548269568/4uy_K_LA_400x400.png" class="rounded-lg h-60 ml-20"/>
+<img src="/images/realavatar.jpg" class="rounded-lg h-60 ml-50"/>
 
 ---
 hidenToc: true
@@ -72,50 +81,7 @@ layout: section
 
 <br/>
 
-## （のちほど公開します）
-
----
-hideInToc: true
----
-
-## 本日のお話
-
-<br/>
-
-「Jetpack XR SDK」がメイン
-
-Android XRを取り巻く状況やSDKの概要
-
-特にSDKが（現状）どのような機能を持っており、  
-どんな目的で使えるものなのか
-
-XR SDKの得意・苦手、使い分けについて
-
-## ゴール
-
-<br/>
-
-- Android XRに興味のあるエンジニアがJetpack XR SDKについて知る
-- Android XRアプリ開発時の技術選定について解像度を高める
-  - 例えばUnityとどっちを使うか、など
-
----
-hideInToc: true
----
-
-## 本セッションにおける検証環境
-
-<br/>
-
-- Windows 11 Home
-- Android Studio Otter 3 Feature Drop | 2025.2.3 Canary 2
-- Android Emulator 36.4.1
-  - Google Play XR Intel x86_64 Atom System Image Revision 7
-- Jetpack XR SDK
-  - Jetpack Compose for XR 1.0.0-alpha08
-  - Material Design for XR 1.0.0-alpha12
-  - Jetpack SceneCore 1.0.0-alpha09
-  - ARCore for Jetpack XR 1.0.0-alpha08
+## （公開予定）
 
 ---
 hideInToc: true
@@ -129,56 +95,157 @@ hideInToc: true
 
 ---
 layout: section
+level: 1
 ---
 
-# Android XRに関する背景
+## Unity/WSサーバにおける<br/>技術選定の背景
 
 ---
-src: ./pages/androidxr-background.md
+level: 2
 ---
 
+## UnityでWebSocketサーバを動かす選択肢
+
+<!--<br/>-->
+
+検索して出てくるのは
+
+- **Fleck**
+  - [statianzo/Fleck](https://github.com/statianzo/Fleck)
+  - NuGetで配布されているC#のWebSocket実装
+  - 最終更新は5年前
+- **websocket-sharp**
+  - [sta/websocket-sharp](https://github.com/sta/websocket-sharp)
+  - 老舗のWebSocket実装ライブラリ
+  - NuGetへの最終リリースは10年前だけどリポジトリはちょくちょく更新かかってるっぽい
+- **NativeWebSocket**
+  - [endel/NativeWebSocket](https://github.com/endel/NativeWebSocket)
+  - 一番モダンな選択肢になりそうだけどあんまり記事で見ない
+  - Unity以外にも色んなプラットフォームに対応
+
+---
+level: 2
+layout: center
+---
+
+WSサーバって
+## 標準ライブラリだけで実装できないっけ……？
+
+<br/>
+
+## <v-click> _→ HttpListenerとWebSocketが使える_ </v-click>
+
+---
+level: 2
+layout: two-cols-header
+---
+
+## 実装のイメージ
+
+::left::
+
+`HttpListener`で接続リクエストを`WebsoketContext`にUpgrade
+
+```cs
+var _listener = new HttpListener();
+
+// ...
+
+var context = await _listener.GetContextAsync();
+
+if (!context.Request.IsWebSocketRequest)
+{
+    context.Response.StatusCode = 400;
+    context.Response.Close();
+    continue;
+}
+
+var wsContext = await context.AcceptWebSocketAsync(null);
+
+var socket = wsContext.WebSocket;
+_ = HandleClientAsync(socket, token);
+```
+
+::right::
+
+<div class="ml-5">
+
+`HandleClientAsync()`内でWebSocketの受信・送信
+
+```cs
+while (socket.State == WebSocketState.Open)
+{
+    var result = await socket.ReceiveAsync(
+        buffer, token
+    );
+
+    var message = Encoding.UTF8.GetString(
+        buffer, 0, result.Count
+    );
+
+    // オウム返しするだけ
+    var response = Encoding.UTF8.GetBytes(
+        $"Echo: {message}"
+    );
+    await socket.SendAsync(
+        response,
+        WebSocketMessageType.Text,
+        true, token
+    );
+}
+```
+
+</div>
+
+---
+level: 2
+---
+
+### これらは.NET Standard 2.0/2.1でサポート
+### Unityでも動きそうな気がする
+
+<br/>
+
+```cs {all|3-8|10-11}
+var context = await _listener.GetContextAsync();
+
+if (!context.Request.IsWebSocketRequest) // なぜか上手く判定されない
+{
+    context.Response.StatusCode = 400;
+    context.Response.Close();
+    continue;
+}
+
+// ここでNotImplementedException
+var wsContext = await context.AcceptWebSocketAsync(null);
+
+var socket = wsContext.WebSocket;
+_ = HandleClientAsync(socket, token);
+```
+
+<v-click>
+
+`HttpListenerContext`が上手く動いてくれない
+
+</v-click>
+
+---
+layout: center
+level: 2
+---
+
+## (動作画面)
+
+<br/>
+
+<img src="/images/errorwin.webp" class="h-100">
+    
 ---
 layout: section
-title: Jetpack XR SDKを使ったアプリ開発
+level: 1
 ---
 
-# Jetpack XR SDKを使った
-
-# アプリ開発
-
----
-src: ./pages/develop-with-xrsdk.md
----
-
----
-layout: section
-title: Deep Dive into XR SDK
----
-
-# Deep Dive into XR SDK
-
----
-src: ./pages/deep-dive-into-sdk.md
----
-
----
-layout: section
-title: XR SDKから考察するAndroid XRアプリ開発
----
-
-# XR SDKから考察する
-
-# Android XRアプリ開発
-
----
-src: ./pages/think-of-sdk.md
----
-
----
-layout: section
----
-
-# おわりに
+## Unity Monoのコードを見てみよう
 
 ---
 level: 2
@@ -188,19 +255,7 @@ level: 2
 
 <br/>
 
-Android XRアプリのネイティブSDKであるJetpack XR SDK
-
-Kotlin / Composeによるアプリ開発ができるため、  
-宣言的UIやリアクティブプログラミングの良さを生かしたUI開発ができる
-
-高度な3Dデータの操作はまだできないため  
-複雑なゲームなどはUnityでやるのが良い
-
-UI主体ならネイティブ、ゲームのようなものはゲームエンジン  
-→ これって**普通の考え方なのでは？**
-
-いままで「XRと言えばUnity」だった世界から  
-要件によって適切な技術選定が必要になってきている
+まとめまとめ
 
 ---
 level: 2

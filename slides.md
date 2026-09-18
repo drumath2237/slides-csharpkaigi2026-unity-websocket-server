@@ -22,18 +22,28 @@ hideInToc: true
 download: true
 export:
   dark: true
+colorSchema: dark
 exportFilename: csharpkaigi26-unity-websocket
 transition: none
-# seoMeta:
-#   ogImage: auto
+seoMeta:
+  ogImage: auto
 ---
 
 <style>
 .intro h1{
     font-size: 3.2rem;
-    line-height: 1
+    line-height: 1;
+}
+
+img.logo{
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 160px;
 }
 </style>
+
+<img src="/images/csharpkaigi.svg" class="logo" />
 
 # Unityで
 # <span style="color:#33CCFF;">System.Net.WebSockets</span> な
@@ -42,6 +52,7 @@ transition: none
 
 ### にー兄さん[@ninisan_drumath](https://twitter.com/ninisan_drumath)
 ### C# Kaigi 2026
+
 
 ---
 layout: two-cols
@@ -157,7 +168,7 @@ if (!context.Request.IsWebSocketRequest)
 {
     context.Response.StatusCode = 400;
     context.Response.Close();
-    continue;
+    return;
 }
 
 var wsContext = await context.AcceptWebSocketAsync(null);
@@ -238,7 +249,7 @@ level: 2
 
 <br/>
 
-<img src="/images/errorwin.webp" class="h-100">
+<img src="/images/errorwin.webp" class="h-100" />
     
 ---
 layout: section
@@ -249,13 +260,141 @@ level: 1
 
 ---
 level: 2
+layout: two-cols-header
+---
+
+## Unity-Technologies/mono
+
+<br/>
+
+::left::
+
+Unity Technologiesのリポジトリに  
+Monoのフォークがある
+
+ディレクトリ構成
+
+```{all|7}
+mono
+├─ mono/  <------------------- Mono Runtimeのコア実装
+├─ mcs/
+│    ├─ mcs/   <-------------  Mono C#コンパイラの実装
+│    ├─ class/
+│    │    ├─ referencesource/  参考用の.NET Coreのコードがあるらしい
+│    │    ├─ System/           よく見るC#クラスライブラリのコード
+│    │    └─ ...
+│    └─ ...
+└─ ...
+```
+
+::right::
+
+<img src="/images/unity-mono.png" class="mt-15 ml-7" />
+
+---
+level: 2
+layout: two-cols-header
+---
+
+## 実際のコードを見てみる
+
+::left::
+
+<br/>
+
+うまく動作しなかった部分を見ると、  
+`[MonoTODO]`というアトリビュートがついていた
+
+実装が不十分なコードになっているっぽい？
+
+実際のコードを確認することで  
+Unity Monoで動作しない裏付けが取れた
+
+::right::
+
+<div class="ml-5 mr--10">
+
+`mcs/class/System/System.Net/HttpListenerRequest.cs`
+
+```cs
+[MonoTODO]
+public bool IsWebSocketRequest {
+	get {
+		return false;
+	}
+}
+```
+
+`mcs/class/System/System.Net/HttpListenerContext.cs`
+
+```cs
+[MonoTODO]
+public Task<HttpListenerWebSocketContext>
+  AcceptWebSocketAsync (string subProtocol)
+{
+	throw new NotImplementedException ();
+}
+```
+
+</div>
+
+---
+layout: section
+level: 1
+---
+
+## おまけ：CoreCLRでも試してみる
+
+---
+level: 2
+layout: two-cols-header
+---
+
+## Unity 6.7とCoreCLR
+
+<br/>
+
+::left::
+
+Unity 6.7（現時点ではα版）から  
+ビルドモジュールからCoreCLRビルドサポートを  
+追加できるように
+
+まだExperimental
+
+6.8からエディタ・デスクトップPlayerの  
+正式リリース予定
+
+::right::
+
+<img src="/images/module.png" class="ml-5 w-85" />
+<img src="/images/sb.png" class="ml-5 mt-5"/>
+
+---
+level: 2
+---
+
+## 動いた！
+
+<br/>
+
+<img src="/images/run.png">
+
+---
+level: 2
 ---
 
 ## まとめ
 
 <br/>
 
-まとめまとめ
+- Unity×WSサーバ実装の選択肢でやたらサードパーティが挙がることに疑問を持った
+- 最新の正式リリース（6.6）の状態で  
+  System.NetスタックなWebSocketサーバ実装は一筋縄ではいかない
+- Unity Monoのコードを見てみると、  
+  `[MonoTODO]`属性がついている未実装部分だということが分かった
+- CoreCLR (experimental)なscripting backendでビルドすると  
+  HttpListenerとWebSocketによるWSサーバが動いた
 
 ---
 level: 2
@@ -265,15 +404,11 @@ level: 2
 
 <br/>
 
-- Android XR (Android Developer)  
-  https://developer.android.com/develop/xr
-- Develop with the Jetpack XR SDK  
-  https://developer.android.com/develop/xr/jetpack-xr-sdk
-- Android Studio tools for XR  
-  https://developer.android.com/develop/xr/jetpack-xr-sdk/studio-tools
-- android/xr-samples (GitHub)  
-  https://github.com/android/xr-samples
-- The future is now, with Compose and AI on Android XR (Google I/O 2025)  
-  https://io.google/2025/explore/technical-session-2
-- 『Jetpack XR SDKによるAndroid XRアプリ開発の現状整理』  
-  https://techbookfest.org/product/3Ttz8QVn4A5uXRYyRm34Xr?productVariantID=fArCdYsZCt0d8ez5nsFNj9
+- HttpListener and Websockets(Unity Discussion)  
+  https://discussions.unity.com/t/httplistener-and-websockets/820948
+- Websocket Server in Standalone build(Unity Discussion)  
+  https://discussions.unity.com/t/websocket-server-in-standalone-build/832108
+- Unity で System.Net.WebSockets を使ったゲームサーバー書こうとしたらうまくいかない(noir_neo’s blog)  
+  https://noir-neo.hatenablog.com/entry/2018/03/17/001718
+- Path to CoreCLR, 2026: Upgrade Guide(Unity Discussion)  
+  https://discussions.unity.com/t/path-to-coreclr-2026-upgrade-guide/1714279
